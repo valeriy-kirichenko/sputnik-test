@@ -18,6 +18,6 @@ class AlertRepository:
 
     async def create(self, alert: Alert) -> Alert:
         self.session.add(alert)
-        await self.session.flush()
+        await self.session.commit()
         await self.session.refresh(alert)
         return alert
