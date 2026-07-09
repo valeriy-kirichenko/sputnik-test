@@ -84,8 +84,19 @@ async def _extract_file_metadata(file_id: str) -> None:
             metadata["line_count"] = line_count
             metadata["char_count"] = char_count
         elif file_item.mime_type == "application/pdf":
-            content = stored_path.read_bytes()
-            metadata["approx_page_count"] = max(content.count(b"/Type /Page"), 1)
+            # ОПТИМИЗАЦИЯ: Асинхронное потоковое чтение чанками
+            # для подсчета страниц PDF
+            async with aiofiles.open(stored_path, "rb") as f:
+                chunk_size = 1024 * 1024 * 10
+                page_count = 0
+                overlap = len(b"/Type /Page") - 1
+                prev_chunk = b""
+                while chunk := await f.read(chunk_size):
+                    combined = prev_chunk + chunk
+                    page_count += combined.count(b"/Type /Page")
+                    prev_chunk = chunk[-overlap:] if len(
+                        chunk) >= overlap else chunk
+                metadata["approx_page_count"] = max(page_count, 1)
 
         file_item.metadata_json = metadata
         file_item.processing_status = "processed"
