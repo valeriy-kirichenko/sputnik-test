@@ -17,3 +17,26 @@ class FileRepository:
 
     async def get_by_id(self, file_id: str) -> Optional[StoredFile]:
         return await self.session.get(StoredFile, file_id)
+
+    async def create(self, file_item: StoredFile) -> StoredFile:
+        self.session.add(file_item)
+        await self.session.flush()
+        await self.session.refresh(file_item)
+        return file_item
+
+    async def update(self, file_id: str, title: str) -> Optional[StoredFile]:
+        file_item = await self.session.get(StoredFile, file_id)
+        if not file_item:
+            return None
+        file_item.title = title
+        await self.session.flush()
+        await self.session.refresh(file_item)
+        return file_item
+
+    async def delete(self, file_id: str) -> bool:
+        file_item = await self.session.get(StoredFile, file_id)
+        if not file_item:
+            return False
+        await self.session.delete(file_item)
+        await self.session.flush()
+        return True
