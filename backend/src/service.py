@@ -1,5 +1,6 @@
 import mimetypes
 import os
+import aiofiles
 from pathlib import Path
 from uuid import uuid4
 
@@ -43,15 +44,25 @@ async def get_file(file_id: str) -> StoredFile:
 
 
 async def create_file(title: str, upload_file: UploadFile) -> StoredFile:
-    content = await upload_file.read()
-    if not content:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty")
-
     file_id = str(uuid4())
     suffix = Path(upload_file.filename or "").suffix
     stored_name = f"{file_id}{suffix}"
     stored_path = STORAGE_DIR / stored_name
-    stored_path.write_bytes(content)
+
+    file_size = 0
+
+    # ОПТИМИЗАЦИЯ: Асинхронная потоковая запись на диск без загрузки в RAM
+    async with aiofiles.open(stored_path, "wb") as buffer:
+        while chunk := await upload_file.read(1024 * 1024):
+            await buffer.write(chunk)
+            file_size += len(chunk)
+
+    file_size = os.path.getsize(stored_path)
+    if file_size == 0:
+        stored_path.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty"
+        )
 
     file_item = StoredFile(
         id=file_id,
@@ -59,7 +70,7 @@ async def create_file(title: str, upload_file: UploadFile) -> StoredFile:
         original_name=upload_file.filename or stored_name,
         stored_name=stored_name,
         mime_type=upload_file.content_type or mimetypes.guess_type(stored_name)[0] or "application/octet-stream",
-        size=len(content),
+        size=file_size,
         processing_status="uploaded",
     )
     async with async_session_maker() as session:
