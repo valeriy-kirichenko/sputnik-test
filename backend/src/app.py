@@ -8,10 +8,12 @@ from starlette import status
 from src.core.config import settings
 from src.schemas import AlertItem, FileItem, FileUpdate
 from src.service import list_alerts
+from src.services.alerts import AlertService
 from src.services.files import FileService
 from src.tasks import scan_file_for_threats
 
 from src.core.database import get_db
+
 
 app = FastAPI()
 app.add_middleware(
@@ -33,8 +35,9 @@ async def list_files_view(db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/alerts", response_model=list[AlertItem])
-async def list_alerts_view():
-    return await list_alerts()
+async def list_alerts_view(db: AsyncSession = Depends(get_db)):
+    service = AlertService(db)
+    return await service.list_alerts()
 
 
 @app.post("/files", response_model=FileItem, status_code=201)

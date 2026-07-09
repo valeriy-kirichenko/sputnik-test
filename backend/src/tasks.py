@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from src.core.config import settings
 from src.models import Alert, StoredFile
+from src.services.alerts import AlertService
 
 _worker_loop: asyncio.AbstractEventLoop | None = None
 
@@ -99,22 +100,27 @@ async def _extract_file_metadata(file_id: str) -> None:
 
 async def _send_file_alert(file_id: str) -> None:
     async with async_session_maker() as session:
+        service = AlertService(session)
         file_item = await session.get(StoredFile, file_id)
         if not file_item:
             return
 
-        if file_item.processing_status == "failed":
-            alert = Alert(file_id=file_id, level="critical", message="File processing failed")
-        elif file_item.requires_attention:
-            alert = Alert(
-                file_id=file_id,
-                level="warning",
-                message=f"File requires attention: {file_item.scan_details}",
-            )
-        else:
-            alert = Alert(file_id=file_id, level="info", message="File processed successfully")
+        params = {
+            'file_id': file_id,
+            'level': 'info',
+            'message': 'File processed successfully'
+        }
 
-        session.add(alert)
+        if file_item.processing_status == "failed":
+            params['level'] = 'critical'
+            params['message'] = 'File processing failed'
+        elif file_item.requires_attention:
+            params['level'] = 'warning'
+            params['message'] = (
+                f'File requires attention: {file_item.scan_details}'
+            )
+
+        await service.create_alert(**params)
         await session.commit()
 
 
