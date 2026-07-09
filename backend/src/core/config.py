@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     STORAGE_DIR: Path = BASE_DIR / "storage" / "files"
 
     @property
-    def DATABASE_URL(self) -> str:
+    def DB_URL(self) -> str:
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:"
             f"{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:"

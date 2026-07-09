@@ -22,7 +22,7 @@ def run_in_worker_loop(coroutine):
 celery_app = Celery(
     "file_tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL
 )
-engine = create_async_engine(settings.DATABASE_URL)
+engine = create_async_engine(settings.DB_URL)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
 

@@ -12,7 +12,7 @@ from src.core.config import settings
 from src.models import Alert, StoredFile
 
 
-engine = create_async_engine(settings.DATABASE_URL)
+engine = create_async_engine(settings.DB_URL)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
 
