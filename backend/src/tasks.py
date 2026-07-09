@@ -3,31 +3,26 @@ from pathlib import Path
 
 import aiofiles
 from celery import Celery
+from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from src.core.config import settings
 from src.models import Alert, StoredFile
 from src.services.alerts import AlertService
 
-_worker_loop: asyncio.AbstractEventLoop | None = None
-
-
-def run_in_worker_loop(coroutine):
-    global _worker_loop
-    if _worker_loop is None or _worker_loop.is_closed():
-        _worker_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(_worker_loop)
-    return _worker_loop.run_until_complete(coroutine)
-
 
 celery_app = Celery(
     "file_tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL
 )
-engine = create_async_engine(settings.DB_URL)
-async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+
+def get_session_maker():
+    engine = create_async_engine(settings.DB_URL, poolclass=NullPool)
+    return async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def _scan_file_for_threats(file_id: str) -> None:
+    async_session_maker = get_session_maker()
     async with async_session_maker() as session:
         file_item = await session.get(StoredFile, file_id)
         if not file_item:
@@ -55,6 +50,7 @@ async def _scan_file_for_threats(file_id: str) -> None:
 
 
 async def _extract_file_metadata(file_id: str) -> None:
+    async_session_maker = get_session_maker()
     async with async_session_maker() as session:
         file_item = await session.get(StoredFile, file_id)
         if not file_item:
@@ -99,6 +95,7 @@ async def _extract_file_metadata(file_id: str) -> None:
 
 
 async def _send_file_alert(file_id: str) -> None:
+    async_session_maker = get_session_maker()
     async with async_session_maker() as session:
         service = AlertService(session)
         file_item = await session.get(StoredFile, file_id)
@@ -121,19 +118,18 @@ async def _send_file_alert(file_id: str) -> None:
             )
 
         await service.create_alert(**params)
-        await session.commit()
 
 
 @celery_app.task
 def scan_file_for_threats(file_id: str) -> None:
-    run_in_worker_loop(_scan_file_for_threats(file_id))
+    asyncio.run(_scan_file_for_threats(file_id))
 
 
 @celery_app.task
 def extract_file_metadata(file_id: str) -> None:
-    run_in_worker_loop(_extract_file_metadata(file_id))
+    asyncio.run(_extract_file_metadata(file_id))
 
 
 @celery_app.task
 def send_file_alert(file_id: str) -> None:
-    run_in_worker_loop(_send_file_alert(file_id))
+    asyncio.run(_send_file_alert(file_id))
